@@ -13,4 +13,4 @@ RUN curl -L -o ffmpeg-release.tar.xz https://johnvansickle.com/ffmpeg/releases/f
     cd .. && \
     rm -rf ffmpeg-release.tar.xz ffmpeg-*-amd64-static
 
-RUN pip install --no-cache-dir yt-dlp requests --prefer-binary
+RUN pip install --no-cache-dir yt-dlp[default,curl-cffi] requests --prefer-binary
