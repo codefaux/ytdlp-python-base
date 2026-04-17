@@ -15,71 +15,60 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
-  check-and-build:
+  build-and-push:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
-      - name: Get latest yt-dlp release
-        id: yt_dlp
+      - name: Get latest upstream release tag
+        id: base
         run: |
-          LATEST=$(curl -s https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest | jq -r .tag_name)
-          echo "latest=$LATEST" >> $GITHUB_OUTPUT
+          TAG=$(curl -s https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest | jq -r '.tag_name')
+          SHORT=${TAG:0:12}
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "short=$SHORT" >> $GITHUB_OUTPUT
 
-      - name: Restore previous version
-        id: cache
-        uses: actions/cache@v4
-        with:
-          path: .yt_dlp_version
-          key: yt-dlp-version-cache
-
-      - name: Read previous version
-        id: previous
+      - name: Set local image tag based on upstream release tag
         run: |
-          if [ -f .yt_dlp_version ]; then
-            echo "prev=$(cat .yt_dlp_version)" >> $GITHUB_OUTPUT
+          echo "IMAGE_TAG=yt-dlp-${{ steps.base.outputs.short }}" >> $GITHUB_ENV
+
+      - name: Check if local image already exists
+        id: exists
+        run: |
+          if docker manifest inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} > /dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
           else
-            echo "prev=none" >> $GITHUB_OUTPUT
+            echo "exists=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Compare versions
-        id: compare
+      - name: Stop if already built (scheduled runs only)
+        if: github.event_name == 'schedule' && steps.exists.outputs.exists == 'true'
         run: |
-          if [ "${{ steps.previous.outputs.prev }}" != "${{ steps.yt_dlp.outputs.latest }}" ]; then
-            echo "changed=true" >> $GITHUB_OUTPUT
-          else
-            echo "changed=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Save new version
-        if: steps.compare.outputs.changed == 'true'
-        run: echo "${{ steps.yt_dlp.outputs.latest }}" > .yt_dlp_version
+          echo "Image for this base already exists. Skipping."
+          exit 0
 
       - name: Set up Docker Buildx
-        if: steps.compare.outputs.changed == 'true'
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
-      - name: Log in to GHCR
-        if: steps.compare.outputs.changed == 'true'
-        uses: docker/login-action@v3
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Generate build version
-        if: steps.compare.outputs.changed == 'true'
-        run: echo "BUILD_TAG=${{ steps.yt_dlp.outputs.latest }}" >> $GITHUB_ENV
-
       - name: Build and push Docker image
-        if: steps.compare.outputs.changed == 'true'
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.BUILD_TAG }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
