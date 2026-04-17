@@ -9,7 +9,7 @@ on:
       - 'Dockerfile'
       - '.github/workflows/docker-build-main.yml'
   schedule:
-    - cron: "0 * * * *"  # check every hour
+    - cron: "38 6 * * *"  # check every day
 
 env:
   REGISTRY: ghcr.io
