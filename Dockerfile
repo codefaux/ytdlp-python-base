@@ -15,4 +15,4 @@ RUN curl -L -o ffmpeg-release.tar.xz https://johnvansickle.com/ffmpeg/releases/f
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-RUN uv pip install --no-cache-dir yt-dlp[default,curl-cffi] requests --system
+RUN uv pip install --no-cache-dir yt-dlp[default,curl-cffi] yt-dlp-ejs deno requests --system
